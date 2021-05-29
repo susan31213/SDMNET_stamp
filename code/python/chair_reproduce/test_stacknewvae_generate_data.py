@@ -91,27 +91,35 @@ datainfo.featurefile = args.featurefile
 print(args.output_dir)
 print(args.lz_d)
 model = modelvae.convMESH(datainfo)
-print('!!!!!!!activate:',datainfo.activate)
 
 #------------------------------------------------------------get feature by id--------------------------------------------------------------------------------------
 # for interid in args.interids:
 # 	f, sf = model.get_features_by_id(datainfo, interid)
 #------------------------------------------------------------get feature by id--------------------------------------------------------------------------------------
 
-# model.recover_mesh(datainfo)
-# model.random_gen(datainfo)
-if len(args.interids) != 0:
-   model.interpolate1(datainfo, args.interids)
-# if len(args.interids) != 0:
-# 	log = model.interpolate1(datainfo, args.interids, step=5, record=True)
-# 	data = []
-# 	for i in range(len(log[0])):
-# 		one_iter_data = []
-# 		for part in log:
-# 			latent = part[i]
-# 			one_iter_data.append(latent)
-# 		data_np = np.array(one_iter_data)
-# 		np.save(f'{i}_latent.npy', data_np)
+armids = []
+with open('armchair_inter_ids.txt', 'r') as f:
+	for i in f.readlines():
+		armids.append(i.strip())
+from itertools import combinations
+import random
+all_pairs = list(combinations(armids,2))
+
+nonarmids = []
+with open('non-armchair_inter_ids.txt', 'r') as f:
+	for i in f.readlines():
+		nonarmids.append(i.strip())
+all_pairs += list(combinations(nonarmids,2))
+
+interids = []
+for p in all_pairs:
+	interids.append(list(p))
+
+import json
+with open('/mnt/data2/dataset/SDM_images/models_arm_nonarn_half/id_pairs.json', 'w') as fp:
+	json.dump(interids, fp)
+
+model.interpolate2(datainfo, interids, '/mnt/data2/dataset/SDM_images/models_arm_nonarn_half', step=6, record=True)
 
 # print(safe_b64encode(str(para)))
 # print(safe_b64decode(safe_b64encode(str(para))))

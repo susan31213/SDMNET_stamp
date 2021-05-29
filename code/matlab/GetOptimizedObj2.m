@@ -2,7 +2,7 @@
 % type: plane, knife and so on
 % recon_inter_random: 1 represent recon, 2 represent inter, 3 represent random
 % use_struct: struc_part or part
-function GetOptimizedObj(recon_inter_random_dir, type, recon_inter_random, use_struct, use_origin)
+function GetOptimizedObj2(recon_inter_random_dir, type, recon_inter_random, use_struct, use_origin, start_idx, end_idx)
     part_names = getlabel(type);
     
     mat_prefix = '';
@@ -18,13 +18,13 @@ function GetOptimizedObj(recon_inter_random_dir, type, recon_inter_random, use_s
     
     n = size(part_names, 2);
     if 0 == use_origin && 0 == use_struct
-        merge_dir = fullfile(recon_inter_random_dir, 'merge');
+        merge_dir = fullfile(recon_inter_random_dir, 'pred_merge');
     elseif 0 == use_origin && 1 == use_struct
-        merge_dir = fullfile(recon_inter_random_dir, 'merge_struct');
+        merge_dir = fullfile(recon_inter_random_dir, 'pred_merge_struct');
     elseif 1 == use_origin && 1 == use_struct
-        merge_dir = fullfile(recon_inter_random_dir, 'merge_struct_origin');
+        merge_dir = fullfile(recon_inter_random_dir, 'pred_merge_struct_origin');
     elseif 1 == use_origin && 0 == use_struct
-        merge_dir = fullfile(recon_inter_random_dir, 'merge_origin');
+        merge_dir = fullfile(recon_inter_random_dir, 'pred_merge_origin');
     end
 
     if ~exist(merge_dir, 'dir')
@@ -34,45 +34,46 @@ function GetOptimizedObj(recon_inter_random_dir, type, recon_inter_random, use_s
     if 0 == use_struct
         part_dirs = fullfile(recon_inter_random_dir, part_names);
     else
-        part_dirs = fullfile(recon_inter_random_dir, cellfun(@(x) ['struc_',x] ,part_names, 'UniformOutput',false));
+        part_dirs = fullfile(recon_inter_random_dir, cellfun(@(x) ['pred_struc_',x] ,part_names, 'UniformOutput',false));
     end
     
     if 0 == use_origin
-        mat = load(fullfile(recon_inter_random_dir, [mat_prefix, '_sym.mat']));
+        mat = load(fullfile(recon_inter_random_dir, [mat_prefix, '_sym_pred.mat']));
     else
         % for debug
         mat = load(fullfile(recon_inter_random_dir, '..', '..', [type, '_vaefeature.mat']));
     end
 
-    max_num = 0;
-    max_dir_files = {};
-    for i = 1:n
-        sub_dir = fullfile(recon_inter_random_dir, part_names{i});
-        sub_dir_files = dir(fullfile(sub_dir, ['*_', part_names{i}, '.obj']));
-        sub_num = size(sub_dir_files, 1);
-        if sub_num > max_num
-            max_num = sub_num;
-            max_dir_files = sub_dir_files;
-        end
-    end
-    max_dir_names = {max_dir_files.name};
-    [max_dir_names, ~] = sort_nat(max_dir_names);
+    % max_num = 0;
+    % max_dir_files = {};
+    % for i = 1:n
+    %     sub_dir = fullfile(recon_inter_random_dir, part_names{i});
+    %     fullfile(sub_dir, ['*_', part_names{i}, '.obj'])
+    %     sub_dir_files = dir(fullfile(sub_dir, ['*_', part_names{i}, '.obj']));
+    %     sub_num = size(sub_dir_files, 1);
+    %     if sub_num > max_num
+    %         max_num = sub_num;
+    %         max_dir_files = sub_dir_files;
+    %     end
+    % end
+    % max_dir_names = {max_dir_files.name};
+    % [max_dir_names, ~] = sort_nat(max_dir_names);
     
-    if 1 == use_origin
-        max_dir_names = mat.modelname;
-    else
-        
-    end
+    % if 1 == use_origin
+    %     max_dir_names = mat.modelname;
+    % else
 
+    % end
 
-    for i = 1:length(max_dir_names)
-        if i <= 1000
-            continue;
-        end
-        id = max_dir_names{i};
-        splitparts = strsplit(id, '_');
-        id = splitparts{1}(1:end);
+    for i = start_idx:end_idx
+        % if i <= 2400
+        %     continue;
+        % end
+        % id = max_dir_names{1}
+        % splitparts = strsplit(id, '_');
+        id = int2str(i-1);
         disp(id);
+        size(mat.symmetry_feature)
         if 0 == use_origin
             code = reshape(mat.symmetry_feature(i, :), n, 2*n+9);
         else

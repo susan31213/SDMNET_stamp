@@ -91,27 +91,25 @@ datainfo.featurefile = args.featurefile
 print(args.output_dir)
 print(args.lz_d)
 model = modelvae.convMESH(datainfo)
-print('!!!!!!!activate:',datainfo.activate)
 
 #------------------------------------------------------------get feature by id--------------------------------------------------------------------------------------
 # for interid in args.interids:
 # 	f, sf = model.get_features_by_id(datainfo, interid)
 #------------------------------------------------------------get feature by id--------------------------------------------------------------------------------------
 
-# model.recover_mesh(datainfo)
-# model.random_gen(datainfo)
-if len(args.interids) != 0:
-   model.interpolate1(datainfo, args.interids)
-# if len(args.interids) != 0:
-# 	log = model.interpolate1(datainfo, args.interids, step=5, record=True)
-# 	data = []
-# 	for i in range(len(log[0])):
-# 		one_iter_data = []
-# 		for part in log:
-# 			latent = part[i]
-# 			one_iter_data.append(latent)
-# 		data_np = np.array(one_iter_data)
-# 		np.save(f'{i}_latent.npy', data_np)
+ids = []
+with open('chair_inter_ids.txt', 'r') as f:
+	for i in f.readlines():
+		ids.append(i.strip())
+from itertools import combinations
+import random
+all_pairs = list(combinations(ids,2))
+random.shuffle(all_pairs)
+interids = []
+for p in all_pairs[:5000]:
+	interids.append(list(p))
+
+model.interpolate3(datainfo, args.interids, step=5)
 
 # print(safe_b64encode(str(para)))
 # print(safe_b64decode(safe_b64encode(str(para))))

@@ -2496,6 +2496,287 @@ class convMESH():
 
         return
 
+    def recover_from_latent(self, sess, datainfo, latents, path, sdm_only=False):
+        deformas = []
+        symmetryf_all = None
+        random2_intpl_all = None
+
+        
+        if advance_api:
+            app_handle = sess.run(self.app_iterator.string_handle())
+
+        for iteration, latent in enumerate(latents):
+            if not sdm_only:
+                for i in range(self.part_num+1):
+                    random2_intpl = np.expand_dims(latent[i], axis=0)
+                    # random2_intpl = interpolate.griddata(np.linspace(0, 1, len(embedding) * 1), embedding, np.linspace(0, 1, step), method='linear')
+
+                    if i < self.part_num:
+                        recover = sess.run([self.embedding_decode[i]], feed_dict = {self.embedding_inputs[i]: random2_intpl})[0]
+                        deforma_v1, deforma_v_align = sess.run([self.deform_vertex[i], self.deform_vertex_align[i]], feed_dict={self.feature2point: recover, self.controlpoint: np.tile([0,0,0], (np.shape(recover)[0], 1, 1))})
+                        deforma_v1 = self.alignallmodels(deforma_v1, id = i)
+                        deformas.append(deforma_v1)
+                        # self.v2objfile(deforma_v1, path + '/' + self.part_name[i], str(iteration), str(iteration), self.part_name[i])
+
+                        rs, rlogr = recover_data(recover, datainfo.logrmin[i], datainfo.logrmax[i], datainfo.smin[i], datainfo.smax[i], self.pointnum)
+                        # sio.savemat(path + '/' + self.part_name[i]+'/inter.mat', {'RS':rs, 'RLOGR':rlogr, 'emb':random2_intpl})
+                    else:
+                        recover = sess.run([self.embedding_decode[i]], feed_dict = {self.embedding_inputs[i]: random2_intpl})[0]
+                        recoversym = np.reshape(recover, (len(recover), self.part_num, self.part_dim+self.hiddendim[0]))
+                        if self.change_net:
+                            symmetryf = np.concatenate([np.expand_dims(recover_datasymv2(recoversym[:,k,-self.part_dim:], datainfo.boxmin[k], datainfo.boxmax[k]), axis = 1) for k in range(self.part_num)], axis = 1)
+                            # sio.savemat(path+'/inter_sym.mat', {'symmetry_feature':symmetryf, 'emb':random2_intpl})
+                        else:
+                            symmetryf = recover_datasym(recoversym[:,:,-self.part_dim:], datainfo.boxmin[0], datainfo.boxmax[0])
+                            # sio.savemat(path+'/inter_sym.mat', {'symmetry_feature':symmetryf, 'emb':random2_intpl})
+
+                        for k in range(self.part_num):
+                            recover1 = sess.run([self.embedding_decode[k]], feed_dict = {self.embedding_inputs[k]: recoversym[:,k,:self.hiddendim[0]]})[0]
+                            deforma_v1, deforma_v_align = sess.run([self.deform_vertex[k], self.deform_vertex_align[k]], feed_dict={self.feature2point: recover1, self.controlpoint: np.tile([0,0,0], (np.shape(recover1)[0], 1, 1))})
+                            deforma_v1 = self.alignallmodels(deforma_v1, id = k)
+                            deformas.append(deforma_v1)
+                            self.v2objfile(deforma_v1, path + '/pred_struc_' + self.part_name[k], str(iteration), str(iteration), self.part_name[k])
+
+                            rs, rlogr = recover_data(recover1, datainfo.logrmin[k], datainfo.logrmax[k], datainfo.smin[k], datainfo.smax[k], self.pointnum)
+                            # sio.savemat(path + '/struc_' + self.part_name[k]+'/inter.mat', {'RS':rs, 'RLOGR':rlogr, 'emb':recoversym[:,k,self.part_dim:]})
+            else:
+                print(f'Progress: {iteration} / {len(latents)}')
+                i = self.part_num
+                # print(type(latent), latent.shape)
+                random2_intpl = np.expand_dims(latent, axis=0)
+                if type(random2_intpl_all) != type(random2_intpl):
+                    random2_intpl_all = random2_intpl
+                else:
+                    random2_intpl_all = np.concatenate([random2_intpl_all, random2_intpl])
+
+                recover = sess.run([self.embedding_decode[i]], feed_dict = {self.embedding_inputs[i]: random2_intpl})[0]
+                recoversym = np.reshape(recover, (len(recover), self.part_num, self.part_dim+self.hiddendim[0]))
+                # print('recoversym:', recoversym.shape)
+                if self.change_net:                         # enter here
+                    symmetryf = np.concatenate([np.expand_dims(recover_datasymv2(recoversym[:,k,-self.part_dim:], datainfo.boxmin[k], datainfo.boxmax[k]), axis = 1) for k in range(self.part_num)], axis = 1)
+                    # print('symmetryf:', symmetryf.shape)
+                    if type(symmetryf_all) != type(symmetryf):
+                        symmetryf_all = symmetryf
+                    else:
+                        symmetryf_all = np.concatenate([symmetryf_all, symmetryf], axis=0)
+                else:
+                    symmetryf = recover_datasym(recoversym[:,:,-self.part_dim:], datainfo.boxmin[0], datainfo.boxmax[0])
+                    if type(symmetryf_all) != type(symmetryf):
+                        symmetryf_all = symmetryf
+                    else:
+                        symmetryf_all = np.concatenate([symmetryf_all, symmetryf], axis=0)
+
+                for k in range(self.part_num):
+                    recover1 = sess.run([self.embedding_decode[k]], feed_dict = {self.embedding_inputs[k]: recoversym[:,k,:self.hiddendim[0]]})[0]
+                    deforma_v1, deforma_v_align = sess.run([self.deform_vertex[k], self.deform_vertex_align[k]], feed_dict={self.feature2point: recover1, self.controlpoint: np.tile([0,0,0], (np.shape(recover1)[0], 1, 1))})
+                    deforma_v1 = self.alignallmodels(deforma_v1, id = k)
+                    deformas.append(deforma_v1)
+                    self.v2objfile(deforma_v1, path + '/pred_struc_' + self.part_name[k], [str(iteration)], str(iteration), self.part_name[k])
+
+                    # rs, rlogr = recover_data(recover1, datainfo.logrmin[k], datainfo.logrmax[k], datainfo.smin[k], datainfo.smax[k], self.pointnum)
+                    # sio.savemat(path + '/pred_struc_' + self.part_name[k]+'/inter.mat', {'RS':rs, 'RLOGR':rlogr, 'emb':recoversym[:,k,self.part_dim:]})
+            if iteration % 100 == 1000:
+                # save inter_sym.mat
+                sio.savemat(path+'/inter_sym_pred.mat', {'symmetry_feature':symmetryf_all, 'emb':random2_intpl_all})
+        # save last inter_sym.mat
+        sio.savemat(path+'/inter_sym_pred.mat', {'symmetry_feature':symmetryf_all, 'emb':random2_intpl_all})
+        return deformas
+
+    def copy_paste_latent(self, sess, datainfo, latent1, latent2, path):
+        deformas = []
+        symmetryf_all = []
+        embs = None
+
+        # 1st model's sdm code(1, 32) -> partnet codes(8, 128)
+        latent1 = np.expand_dims(latent1, axis=0)
+        recover1 = sess.run([self.embedding_decode[self.part_num]], feed_dict = {self.embedding_inputs[self.part_num]: latent1})[0]
+        recoversym1 = np.reshape(recover1, (len(recover1), self.part_num, self.part_dim+self.hiddendim[0]))
+        
+        # 2nd model's sdm code(1, 32) -> partnet codes(8, 128)
+        latent2 = np.expand_dims(latent2, axis=0)
+        recover2 = sess.run([self.embedding_decode[self.part_num]], feed_dict = {self.embedding_inputs[self.part_num]: latent2})[0]
+        recoversym2 = np.reshape(recover2, (len(recover2), self.part_num, self.part_dim+self.hiddendim[0]))
+
+        # create a new object partnet code, copy 2nd model's chair back to 1st model
+        edit_part_idx = [2,7]
+        recoversym3 = recoversym2.copy()
+        recoversym3[:, edit_part_idx, :] = recoversym1[:, edit_part_idx, :].copy()
+        if self.change_net:                         # enter here
+            symmetryf3 = np.concatenate([np.expand_dims(recover_datasymv2(recoversym3[:,k,-self.part_dim:].copy(), datainfo.boxmin[k], datainfo.boxmax[k]), axis = 1) for k in range(self.part_num)], axis = 1)
+        else:
+            symmetryf3 = recover_datasym(recoversym3[:,:,-self.part_dim:], datainfo.boxmin[0], datainfo.boxmax[0])
+
+        # generate edited obj
+        recovers = None
+        for k in range(self.part_num):
+            recover = sess.run([self.embedding_decode[k]], feed_dict = {self.embedding_inputs[k]: recoversym3[:,k,:self.hiddendim[0]].copy()})[0]
+            if k == 0:
+                recovers = recover.copy()
+            else:
+                recovers = np.concatenate([recovers, recover.copy()])
+
+            deforma_v1, deforma_v_align = sess.run([self.deform_vertex[k], self.deform_vertex_align[k]], feed_dict={self.feature2point: recover, self.controlpoint: np.tile([0,0,0], (np.shape(recover)[0], 1, 1))})
+            deforma_v1 = self.alignallmodels(deforma_v1, id = k)
+            deformas.append(deforma_v1)
+            self.v2objfile(deforma_v1, path + '/gt_struc_' + self.part_name[k], ['0', '1'], ['0', '1'], self.part_name[k])
+            
+
+        self.feature[1] = recovers.copy()
+        self.symmetry_feature[1] = recoversym3[0,:,-self.part_dim:]
+
+        if advance_api:
+            app_handle = sess.run(self.app_iterator.string_handle())
+        
+        # encode shape features(8, 3752, 9) -> sdm latent code(1, 32)
+        if advance_api:
+            app_handle = sess.run(self.app_iterator.string_handle())
+        for i in range(self.part_num+1):
+            sess.run(self.app_iterator.initializer, feed_dict={self.inputs_feature: self.feature, self.inputs_symmetry: self.symmetry_feature.copy()})
+            while True:
+                try:
+                    embedding = sess.run([self.encode[i]], feed_dict = {self.handle: app_handle})[0]
+                except tf.errors.OutOfRangeError:
+                    break
+            embedding = embedding[[1]]
+            # print(embedding.shape)  # (1, 32)
+
+        # decode sdm latent code to obj file, this should be like "gt_struc" obj
+        recover_from32 = sess.run([self.embedding_decode[self.part_num]], feed_dict = {self.embedding_inputs[self.part_num]: embedding})[0]
+        recoversym_from32 = np.reshape(recover_from32, (len(recover_from32), self.part_num, self.part_dim+self.hiddendim[0]))
+        for k in range(self.part_num):
+            recover = sess.run([self.embedding_decode[k]], feed_dict = {self.embedding_inputs[k]: recoversym_from32[:,k,:self.hiddendim[0]]})[0]
+            deforma_v1, deforma_v_align = sess.run([self.deform_vertex[k], self.deform_vertex_align[k]], feed_dict={self.feature2point: recover, self.controlpoint: np.tile([0,0,0], (np.shape(recover)[0], 1, 1))})
+            deforma_v1 = self.alignallmodels(deforma_v1, id = k)
+            deformas.append(deforma_v1)
+            self.v2objfile(deforma_v1, path + '/pred_struc_' + self.part_name[k], ['0', '1'], ['0', '1'], self.part_name[k])
+
+        # save inter_sym.mat
+        sio.savemat(path+'/inter_sym_pred.mat', {'symmetry_feature':symmetryf3, 'emb':embedding})
+        np.savez(f'{path}/embedding.npz', z=embedding)
+
+        return deformas
+
+    def encoder_and_decode(self, sess, datainfo, latent, path):
+        # model's sdm code(1, 32) -> partnet codes(8, 128)
+        latent = np.expand_dims(latent, axis=0)
+        recover = sess.run([self.embedding_decode[self.part_num]], feed_dict = {self.embedding_inputs[self.part_num]: latent})[0]
+        recoversym = np.reshape(recover, (len(recover), self.part_num, self.part_dim+self.hiddendim[0]))
+        symmetryf = np.concatenate([np.expand_dims(recover_datasymv2(recoversym[:,k,-self.part_dim:], datainfo.boxmin[k], datainfo.boxmax[k]), axis = 1) for k in range(self.part_num)], axis = 1)
+
+        # generate edited obj
+        recovers = None
+        for k in range(self.part_num):
+            recover = sess.run([self.embedding_decode[k]], feed_dict = {self.embedding_inputs[k]: recoversym[:,k,:self.hiddendim[0]]})[0]
+            deforma_v1, deforma_v_align = sess.run([self.deform_vertex[k], self.deform_vertex_align[k]], feed_dict={self.feature2point: recover, self.controlpoint: np.tile([0,0,0], (np.shape(recover)[0], 1, 1))})
+            deforma_v1 = self.alignallmodels(deforma_v1, id = k)
+            self.v2objfile(deforma_v1, path + '/gt_struc_' + self.part_name[k], ['0'], '0', self.part_name[k])
+            if k == 0:
+                recovers = recover.copy()
+            else:
+                recovers = np.concatenate([recovers, recover.copy()])
+
+        
+        # encode shape features(8, 3752, 9) -> sdm latent code(1, 32)
+        self.feature[269] = recovers.copy()
+        print(self.symmetry_feature[269].shape, self.symmetry_feature[269])
+        print(recoversym[:,:,-self.part_dim:].shape, recoversym[:,:,-self.part_dim:])
+        self.symmetry_feature[269] = recoversym[0,:,-self.part_dim:].copy()
+        
+        if advance_api:
+            app_handle = sess.run(self.app_iterator.string_handle())
+        for i in range(self.part_num+1):
+            sess.run(self.app_iterator.initializer, feed_dict={self.inputs_feature: self.feature, self.inputs_symmetry: self.symmetry_feature})
+            while True:
+                try:
+                    embedding = sess.run([self.encode[i]], feed_dict = {self.handle: app_handle})[0]
+                except tf.errors.OutOfRangeError:
+                    break
+            embedding = embedding[[269]]
+            print(embedding.shape)  # (1, 32)
+
+        # decode sdm latent code to obj file, this should be like "gt_struc" obj
+        recover_from32 = sess.run([self.embedding_decode[self.part_num]], feed_dict = {self.embedding_inputs[self.part_num]: embedding})[0]
+        recoversym_from32 = np.reshape(recover_from32, (len(recover_from32), self.part_num, self.part_dim+self.hiddendim[0]))
+        for k in range(self.part_num):
+            recover = sess.run([self.embedding_decode[k]], feed_dict = {self.embedding_inputs[k]: recoversym_from32[:,k,:self.hiddendim[0]]})[0]
+            deforma_v1, deforma_v_align = sess.run([self.deform_vertex[k], self.deform_vertex_align[k]], feed_dict={self.feature2point: recover, self.controlpoint: np.tile([0,0,0], (np.shape(recover)[0], 1, 1))})
+            deforma_v1 = self.alignallmodels(deforma_v1, id = k)
+            self.v2objfile(deforma_v1, path + '/pred_struc_' + self.part_name[k], ['0', '1'], ['0', '1'], self.part_name[k])
+
+        # save inter_sym.mat
+        sio.savemat(path+'/inter_sym_pred.mat', {'symmetry_feature':symmetryf, 'emb':embedding})
+        np.savez(f'{path}/embedding.npz', z=embedding)
+
+        return
+
+    def simple_encode_decode1(self, datainfo, path, epoch = 0):
+        with tf.Session(config = self.config) as sess:
+            tf.global_variables_initializer().run()
+            if epoch == 0:
+                _success, epoch = self.load(sess, self.checkpoint_dir_structure)
+
+            if not _success:
+                raise Exception("抛出一个异常")
+
+            inter_id = ['677846a1d3777e90ffb9df6156f4114e']
+            new_id = ['1f1b07bf637b3a1582db9fca4b68095']
+            for i in range(len(inter_id)):
+                if isinstance(inter_id[i], str) and len(inter_id[i])>len(str(datainfo.modelnum)):
+                    inter_id[i] = datainfo.modelname.index(inter_id[i])
+                else:
+                    inter_id[i] = int(inter_id[i])
+                print('ID: {:3d} Name: {}'.format(inter_id[i], datainfo.modelname[inter_id[i]]))
+            for i in range(len(new_id)):
+                if isinstance(new_id[i], str) and len(new_id[i])>len(str(datainfo.modelnum)):
+                    new_id[i] = datainfo.modelname.index(new_id[i])
+                else:
+                    new_id[i] = int(new_id[i])
+                print('ID: {:3d} Name: {}'.format(new_id[i], datainfo.modelname[new_id[i]]))
+                
+            inter_feature = self.feature.copy()
+            inter_feature[inter_id] = inter_feature[new_id]
+            symmetry_feature = self.symmetry_feature.copy()
+            symmetry_feature[inter_id] = symmetry_feature[new_id]
+            
+            if advance_api:
+                app_handle = sess.run(self.app_iterator.string_handle())
+
+            for i in range(self.part_num+1):
+                if advance_api:
+                    sess.run(self.app_iterator.initializer, feed_dict={self.inputs_feature: inter_feature, self.inputs_symmetry: symmetry_feature})
+                    while True:
+                        try:
+                            embedding = sess.run([self.encode[i]], feed_dict = {self.handle: app_handle})[0]
+                            # print('in while', embedding.shape)
+                            break
+                        except tf.errors.OutOfRangeError:
+                            break
+                    
+                    embedding = embedding[inter_id]     # embedding.shape = (len(inter_id), 32)
+                    # sdm1 = embedding
+                else:
+                    embedding = sess.run([self.encode[i]], feed_dict = {self.inputs_feature: inter_feature, self.inputs_symmetry: symmetry_feature})[0]
+                print((embedding.shape))
+                random2_intpl = embedding
+
+                if i < self.part_num:
+                    continue
+                else:
+                    recover = sess.run([self.embedding_decode[i]], feed_dict = {self.embedding_inputs[i]: random2_intpl})[0]
+                    recoversym = np.reshape(recover, (len(recover), self.part_num, self.part_dim+self.hiddendim[0]))
+                    symmetryf = np.concatenate([np.expand_dims(recover_datasymv2(recoversym[:,k,-self.part_dim:], datainfo.boxmin[k], datainfo.boxmax[k]), axis = 1) for k in range(self.part_num)], axis = 1)
+                    recover1s = None
+                    for k in range(self.part_num):
+                        recover1 = sess.run([self.embedding_decode[k]], feed_dict = {self.embedding_inputs[k]: recoversym[:,k,:self.hiddendim[0]]})[0]
+                        recover1s = recover1 if k ==0 else np.concatenate([recover1s, recover1])
+                        deforma_v1, deforma_v_align = sess.run([self.deform_vertex[k], self.deform_vertex_align[k]], feed_dict={self.feature2point: recover1, self.controlpoint: np.tile([0,0,0], (np.shape(recover1)[0], 1, 1))})
+                        deforma_v1 = self.alignallmodels(deforma_v1, id = k)
+                        num_list_new = [str(x) for x in np.arange(np.shape(deforma_v1)[0])]
+                        self.v2objfile(deforma_v1, path + '/pred_struc_' + self.part_name[k], num_list_new, num_list_new, self.part_name[k])
+        print('embedding:', embedding.shape, 'symmetryf:', symmetryf.shape)
+        sio.savemat(path+'/inter_sym_pred.mat', {'symmetry_feature':symmetryf, 'emb':embedding})
+        return embedding, recover1s, symmetryf
+    
 #------------------------------------------------------------applications--------------------------------------------------------------------------------------
 
 #------------------------------------------------------------feature2vertex--------------------------------------------------------------------------------------

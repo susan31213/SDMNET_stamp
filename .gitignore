@@ -1,0 +1,11 @@
+*.obj
+*.npy
+*.txt
+*.mat
+*.png
+*.pyc
+*.npz
+*.dat
+checkpoint
+structure_ckt
+.vscode
